@@ -1,46 +1,81 @@
 const crypto = require("crypto");
 const axios = require("axios");
 
-const APP_ID = "554"; // Thay bằng app_id từ ZaloPay Sandbox
-const KEY_1 = "8NdU5pG5R2spGHGhyO99HN1OhD8IQJBn"; // Thay bằng key1 từ ZaloPay Sandbox
-const ENDPOINT = "https://sb-openapi.zalopay.vn/v2/create"; // Endpoint chính thức
+const config = {
+    app_id: "2554",
+    key1: "sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn",
+    key2: "trMrHtvjo6myautxDUiAcYsVtaeQ8nhf",
+    endpoint: "https://sb-openapi.zalopay.vn/v2/create",
+    query_endpoint: "https://sb-openapi.zalopay.vn/v2/query",
+};
 
-async function createZaloPayOrder(amount, orderId) {
-    const embed_data = { orderId }; // Gửi orderId để callback xử lý
-    const items = [];
-    const transID = `${new Date().toISOString().slice(2, 10).replace(/-/g, "")}_${Date.now()}`; // Ví dụ: 250320_123456789
+const createZaloPayOrder = async (amount, pendingOrderId, appTransId) => {
+    const embed_data = JSON.stringify({ pendingOrderId });
+    const items = JSON.stringify([]);
+    const transId = appTransId;
 
     const order = {
-        app_id: APP_ID,
-        app_trans_id: transID, // Phải duy nhất cho mỗi giao dịch
+        app_id: config.app_id,
+        app_trans_id: transId,
         app_user: "test_user",
         app_time: Date.now(),
-        amount: amount.toString(), // Chuỗi, số nguyên dương
-        item: JSON.stringify(items),
-        embed_data: JSON.stringify(embed_data),
-        description: `Thanh toán đơn hàng #${orderId}`,
-        bank_code: "", // Có thể để trống hoặc chọn bank_code nếu cần
+        item: items,
+        embed_data: embed_data,
+        amount: amount.toString(),
+        description: `Thanh toán đơn hàng #${pendingOrderId}`,
+        bank_code: "",
     };
 
-    // Tạo MAC
-    const data = `${order.app_id}|${order.app_trans_id}|${order.app_user}|${order.amount}|${order.app_time}|${order.embed_data}|${order.item}`;
-    order.mac = crypto.createHmac("sha256", KEY_1).update(data).digest("hex");
+    const data = `${config.app_id}|${order.app_trans_id}|${order.app_user}|${order.amount}|${order.app_time}|${order.embed_data}|${order.item}`;
+    order.mac = crypto.createHmac("sha256", config.key1).update(data).digest("hex");
 
-    console.log("Request to ZaloPay:", order); // Log dữ liệu gửi đi
+    console.log("Request to ZaloPay:", order);
+    const encodedData = new URLSearchParams(order).toString();
+    console.log("Encoded Data to ZaloPay:", encodedData);
 
     try {
-        const response = await axios.post(ENDPOINT, new URLSearchParams(order).toString(), {
+        const response = await axios.post(config.endpoint, encodedData, {
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded",
             },
         });
-        console.log("Response from ZaloPay:", response.data); // Log phản hồi
+        console.log("Response from ZaloPay:", response.data);
         return response.data;
     } catch (error) {
         const errorDetail = error.response ? error.response.data : error.message;
-        console.error("ZaloPay API Error:", errorDetail); // Log lỗi chi tiết
-        return { return_code: -1, return_message: "Lỗi khi gọi ZaloPay API", error: errorDetail };
+        console.error("❌ ZaloPay error:", JSON.stringify(errorDetail, null, 2));
+        throw errorDetail;
     }
-}
+};
 
-module.exports = { createZaloPayOrder };
+const queryZaloPayOrder = async (appTransId) => {
+    const params = {
+        app_id: config.app_id,
+        app_trans_id: appTransId,
+    };
+
+    const data = `${config.app_id}|${appTransId}|${config.key1}`;
+    params.mac = crypto.createHmac("sha256", config.key1).update(data).digest("hex");
+
+    console.log("Query ZaloPay Order:", params);
+
+    try {
+        const response = await axios.post(
+            config.query_endpoint,
+            new URLSearchParams(params).toString(),
+            {
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            }
+        );
+        console.log("Query Response from ZaloPay:", response.data);
+        return response.data;
+    } catch (error) {
+        const errorDetail = error.response ? error.response.data : error.message;
+        console.error("❌ ZaloPay query error:", JSON.stringify(errorDetail, null, 2));
+        throw errorDetail;
+    }
+};
+
+module.exports = { createZaloPayOrder, queryZaloPayOrder, config };
