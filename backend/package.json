@@ -29,7 +29,8 @@
     "p-queue": "^8.1.0",
     "redis": "^4.7.0",
     "slugify": "^1.6.6",
-    "translate": "^3.0.1"
+    "translate": "^3.0.1",
+    "vietnam-provinces": "^0.0.4"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
