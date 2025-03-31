@@ -69,4 +69,23 @@ router.post("/save", (req, res) => {
     );
 });
 
+// Xóa địa chỉ
+router.delete("/:addressId", (req, res) => {
+    const { addressId } = req.params;
+    connection.query(
+        "DELETE FROM address WHERE id = ?",
+        [addressId],
+        (error, results) => {
+            if (error) {
+                console.error("Query error:", error);
+                return res.status(500).json({ message: "Error deleting address", error: error.message });
+            }
+            if (results.affectedRows === 0) {
+                return res.status(404).json({ message: "Address not found" });
+            }
+            res.json({ message: "Address deleted successfully" });
+        }
+    );
+});
+
 module.exports = router;
