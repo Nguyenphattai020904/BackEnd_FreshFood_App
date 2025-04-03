@@ -55,7 +55,7 @@ const removeAccents = (str) => {
 const triggerKeywords = [
     "danh sách", "hãy lấy", "lấy cho tui", "lấy", "muốn", "nguyên liệu", "công thức",
     "cho tui", "tìm", "có những", "liệt kê", "gợi ý", "đề xuất", "cần", "tìm kiếm",
-    "món ăn", "thực phẩm", "sản phẩm", "dinh dưỡng", "ăn uống", "chế độ ăn"
+    "món ăn", "thực phẩm", "sản phẩm", "dinh dưỡng", "ăn uống", "chế độ ăn", "giảm giá"
 ];
 
 // 🔹 Lấy danh sách sản phẩm từ database để thêm vào validTopics
@@ -70,7 +70,8 @@ let validTopics = [
     "cá", "rau", "trái cây", "sữa", "phô mai", "bánh mì", "gạo", 
     "mì", "gia vị", "dầu ăn", "nước chấm", "thức uống", "trà", "cà phê", 
     "năng lượng", "cholesterol", "đạm", "khoáng chất", "chất xơ", 
-    "healthy", "lành mạnh", "tập luyện", "thể dục", "béo phì", "tiểu đường",
+    "healthy", "lành mạnh", "tập luyện", "thể dục", "béo phì", "tiểu đường", "kế hoạchhoạch", "nghèo", "ít tiền", "giá rẻ", "thực phẩm giá rẻ", "thực phẩm tiết kiệm", "thực phẩm bình dân",
+    "thực phẩm hữu cơ", "thực phẩm sạch", "thực phẩm an toàn", "thực phẩm tươi sống", "thực phẩm chế biến sẵn", "thực phẩm dinh dưỡng", "thực phẩm bổ sung", "thực phẩm chức năng", "thực phẩm tiện lợi", "thực phẩm nhanh chóng", "thực phẩm dễ chế biến", "thực phẩm dễ ăn", "thực phẩm ngon miệng", "thực phẩm hấp dẫn", "thực phẩm bổ dưỡng", "cảm cúm", "sốt", "đãi tiệc", "sinh nhật", "mừng tuổi", "mừng thọ",
 
     // Tiếng Anh
     "food", "nutrition", "health", "diet", "calories", "protein", 
@@ -270,7 +271,5 @@ router.post("/ask-ai", verifyToken, askAiLimiter, async (req, res) => {
         res.status(500).json({ success: false, message: "Lỗi server", error: error.message });
     }
 });
-
-module.exports = router;
 
 module.exports = router;
