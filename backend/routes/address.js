@@ -88,4 +88,56 @@ router.delete("/:addressId", (req, res) => {
     );
 });
 
+// Lấy tất cả địa chỉ
+router.get("/all", (req, res) => {
+    connection.query(
+        "SELECT * FROM address",
+        (err, results) => {
+            if (err) return res.status(500).json({ message: "Database error", error: err });
+            res.json({ addresses: results });
+        }
+    );
+});
+
+// Thêm địa chỉ
+router.post("/add", (req, res) => {
+    const { user_id, province_code, province_name, district_code, district_name, ward_code, ward_name, street_address } = req.body;
+    connection.query(
+        "INSERT INTO address (user_id, province_code, province_name, district_code, district_name, ward_code, ward_name, street_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [user_id, province_code, province_name, district_code, district_name, ward_code, ward_name, street_address],
+        (err, results) => {
+            if (err) return res.status(500).json({ message: "Error adding address", error: err.message });
+            res.json({ message: "Address added successfully", addressId: results.insertId });
+        }
+    );
+});
+
+// Sửa địa chỉ
+router.put("/update", (req, res) => {
+    const { id, user_id, province_code, province_name, district_code, district_name, ward_code, ward_name, street_address } = req.body;
+    connection.query(
+        "UPDATE address SET user_id = ?, province_code = ?, province_name = ?, district_code = ?, district_name = ?, ward_code = ?, ward_name = ?, street_address = ? WHERE id = ?",
+        [user_id, province_code, province_name, district_code, district_name, ward_code, ward_name, street_address, id],
+        (err, results) => {
+            if (err) return res.status(500).json({ message: "Error updating address", error: err.message });
+            if (results.affectedRows === 0) return res.status(404).json({ message: "Address not found" });
+            res.json({ message: "Address updated successfully" });
+        }
+    );
+});
+
+// Xóa địa chỉ
+router.delete("/delete/:id", (req, res) => {
+    const { id } = req.params;
+    connection.query(
+        "DELETE FROM address WHERE id = ?",
+        [id],
+        (err, results) => {
+            if (err) return res.status(500).json({ message: "Error deleting address", error: err.message });
+            if (results.affectedRows === 0) return res.status(404).json({ message: "Address not found" });
+            res.json({ message: "Address deleted successfully" });
+        }
+    );
+});
+
 module.exports = router;

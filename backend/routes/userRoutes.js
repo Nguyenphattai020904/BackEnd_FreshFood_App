@@ -240,4 +240,43 @@ router.post("/updatePassword", async (req, res) => {
     });
 });
 
+// Lấy danh sách tất cả người dùng
+router.get("/all", (req, res) => {
+    connection.query(
+        "SELECT id, name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth FROM users",
+        (err, results) => {
+            if (err) return res.status(500).json({ message: "Database error", error: err });
+            res.json({ users: results });
+        }
+    );
+});
+
+// Lấy thông tin người dùng theo ID
+router.get("/user/:id", (req, res) => {
+    const userId = req.params.id;
+    connection.query(
+        "SELECT id, name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth FROM users WHERE id = ?",
+        [userId],
+        (err, results) => {
+            if (err) return res.status(500).json({ message: "Database error", error: err });
+            if (results.length === 0) return res.status(404).json({ message: "User not found" });
+            res.json(results[0]);
+        }
+    );
+});
+
+// Xóa người dùng
+router.delete("/:id", (req, res) => {
+    const userId = req.params.id;
+    connection.query(
+        "DELETE FROM users WHERE id = ?",
+        [userId],
+        (err, results) => {
+            if (err) return res.status(500).json({ message: "Database error", error: err });
+            if (results.affectedRows === 0) return res.status(404).json({ message: "User not found" });
+            res.json({ message: "User deleted successfully" });
+        }
+    );
+});
+
 module.exports = router;
