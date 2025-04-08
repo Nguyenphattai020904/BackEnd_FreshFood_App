@@ -13,7 +13,7 @@ const config = {
     key2: "trMrHtvjo6myautxDUiAcYsVtaeQ8nhf",
     endpoint_create: "https://sb-openapi.zalopay.vn/v2/create",
     endpoint_query: "https://sb-openapi.zalopay.vn/v2/query",
-    callback_url: "https://d7b0-113-161-85-254.ngrok-free.app/order/zalopay-callback" // Thay bằng ngrok URL mới
+    callback_url: "https://1319-2405-4802-80bc-4590-f4cc-97f8-4531-42a3.ngrok-free.app/order/zalopay-callback" // Thay bằng ngrok URL mới
 };
 
 // Hàm tạo app_trans_id duy nhất
@@ -219,13 +219,11 @@ router.get("/order-status/:orderId", async (req, res) => {
 // API lấy danh sách đơn hàng của người dùng
 router.get("/:userId", verifyToken, (req, res) => {
     const { userId } = req.params;
-
     if (req.user.id != userId) {
         return res.status(403).json({ message: "Không có quyền truy cập" });
     }
-
     connection.query(
-        `SELECT o.id AS orderId, o.created_at AS orderDate, o.total_price AS totalPrice,
+        `SELECT o.id AS orderId, o.created_at AS orderDate, o.total_price AS totalPrice, o.status,
                 COALESCE(
                     (SELECT oi.image FROM order_items oi WHERE oi.order_id = o.id LIMIT 1),
                     'https://example.com/default-image.jpg'
@@ -239,7 +237,7 @@ router.get("/:userId", verifyToken, (req, res) => {
                 console.log("❌ Database error:", err.message || err);
                 return res.status(500).json({ message: "Lỗi database", error: err.message || err });
             }
-
+    
             res.json({
                 success: true,
                 message: "Lấy danh sách đơn hàng thành công",
@@ -247,6 +245,7 @@ router.get("/:userId", verifyToken, (req, res) => {
                     orderId: order.orderId.toString(),
                     orderDate: order.orderDate ? order.orderDate.toISOString().split("T")[0] : null,
                     totalPrice: order.totalPrice,
+                    status: order.status, // Thêm status vào response
                     firstProductImage: order.firstProductImage || "https://example.com/default-image.jpg"
                 }))
             });
@@ -258,9 +257,8 @@ router.get("/:userId", verifyToken, (req, res) => {
 router.get("/detail/:orderId", verifyToken, (req, res) => {
     const { orderId } = req.params;
     const userId = req.user.id;
-
     connection.query(
-        "SELECT o.id, o.created_at, o.total_price, o.voucher_id, " +
+        "SELECT o.id, o.created_at, o.total_price, o.voucher_id, o.status, " +
         "oi.product_id, p.name AS product_name, oi.quantity, oi.price, oi.image, " +
         "v.voucher_type, v.voucher_value " +
         "FROM orders o " +
@@ -277,18 +275,19 @@ router.get("/detail/:orderId", verifyToken, (req, res) => {
             if (results.length === 0) {
                 return res.status(404).json({ message: "Đơn hàng không tồn tại hoặc không thuộc về bạn" });
             }
-
+    
             const order = {
                 id: results[0].id,
                 order_date: results[0].created_at,
                 total_price: results[0].total_price,
                 voucher_id: results[0].voucher_id,
                 voucher_type: results[0].voucher_type,
-                voucher_value: results[0].voucher_value
+                voucher_value: results[0].voucher_value,
+                status: results[0].status // Thêm status
             };
-
+    
             const finalTotalPrice = order.total_price;
-
+    
             const items = results
                 .filter(row => row.product_id !== null && row.product_id != 0 && row.quantity > 0)
                 .map(row => ({
@@ -298,10 +297,7 @@ router.get("/detail/:orderId", verifyToken, (req, res) => {
                     price: row.price || 0,
                     image: row.image || "https://example.com/default-image.jpg"
                 }));
-
-            console.log("Order details:", { ...order, final_total_price: finalTotalPrice });
-            console.log("Items:", items);
-
+    
             res.json({
                 success: true,
                 message: "Lấy chi tiết đơn hàng thành công",
@@ -309,6 +305,7 @@ router.get("/detail/:orderId", verifyToken, (req, res) => {
                     orderId: order.id.toString(),
                     orderDate: order.order_date ? order.order_date.toISOString().split("T")[0] : null,
                     totalPrice: finalTotalPrice,
+                    status: order.status, // Thêm status vào response
                     items: items
                 }
             });
@@ -855,21 +852,73 @@ router.put("/:orderId", (req, res) => {
         return res.status(400).json({ message: "Thiếu thông tin cần thiết để cập nhật đơn hàng" });
     }
 
+    // Lấy trạng thái hiện tại của đơn hàng
     connection.query(
-        "UPDATE orders SET user_id = ?, total_price = ?, status = ?, payment_method = ?, name = ?, phone = ?, address = ?, payment_status = ?, created_at = ?, voucher_id = ?, app_trans_id = ? WHERE id = ?",
-        [user_id, total_price, status, payment_method, name, phone, address, payment_status || "unpaid", created_at || null, voucher_id || null, app_trans_id || null, orderId],
+        "SELECT status, user_id FROM orders WHERE id = ?",
+        [orderId],
         (err, results) => {
             if (err) {
-                console.error("❌ Error updating order:", err);
-                return res.status(500).json({ message: "Error updating order", error: err.message });
+                console.error("❌ Error fetching current order status:", err);
+                return res.status(500).json({ message: "Lỗi database", error: err.message });
             }
-            if (results.affectedRows === 0) {
+            if (results.length === 0) {
                 return res.status(404).json({ message: "Order not found" });
             }
-            res.json({ message: "Order updated successfully" });
+
+            const currentStatus = results[0].status;
+            const orderUserId = results[0].user_id;
+
+            // Cập nhật đơn hàng
+            connection.query(
+                "UPDATE orders SET user_id = ?, total_price = ?, status = ?, payment_method = ?, name = ?, phone = ?, address = ?, payment_status = ?, created_at = ?, voucher_id = ?, app_trans_id = ? WHERE id = ?",
+                [user_id, total_price, status, payment_method, name, phone, address, payment_status || "unpaid", created_at || null, voucher_id || null, app_trans_id || null, orderId],
+                (err, results) => {
+                    if (err) {
+                        console.error("❌ Error updating order:", err);
+                        return res.status(500).json({ message: "Error updating order", error: err.message });
+                    }
+                    if (results.affectedRows === 0) {
+                        return res.status(404).json({ message: "Order not found" });
+                    }
+
+                    // Kiểm tra nếu status thay đổi
+                    if (currentStatus !== status) {
+                        const formattedStatus = formatStatus(status); // Hàm định dạng trạng thái
+                        const notificationMessage = `Mã đơn hàng: ${orderId}. Đơn hàng của bạn đang ${formattedStatus}.`;
+
+                        // Thêm thông báo vào bảng notifications
+                        connection.query(
+                            "INSERT INTO notifications (user_id, type, message, related_id, created_at) VALUES (?, 'order_update', ?, ?, NOW())",
+                            [orderUserId, notificationMessage, orderId],
+                            (err) => {
+                                if (err) {
+                                    console.error("❌ Error adding notification:", err);
+                                    // Không trả lỗi vì cập nhật đơn hàng đã thành công
+                                } else {
+                                    console.log(`✅ Notification sent for order ${orderId}: ${notificationMessage}`);
+                                }
+                            }
+                        );
+                    }
+
+                    res.json({ message: "Order updated successfully" });
+                }
+            );
         }
     );
 });
+
+// Hàm định dạng trạng thái sang tiếng Việt
+function formatStatus(status) {
+    switch (status) {
+        case "pending": return "đang xử lý";
+        case "confirmed": return "đã xác nhận";
+        case "packing": return "đang đóng gói";
+        case "shipping": return "đang giao hàng";
+        case "delivered": return "đã giao hàng";
+        default: return status;
+    }
+}
 
 router.delete("/:orderId", (req, res) => {
     const { orderId } = req.params;

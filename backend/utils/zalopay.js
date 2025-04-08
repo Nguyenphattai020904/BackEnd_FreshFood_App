@@ -7,7 +7,7 @@ const config = {
     key2: "trMrHtvjo6myautxDUiAcYsVtaeQ8nhf",
     endpoint_create: "https://sb-openapi.zalopay.vn/v2/create",
     endpoint_query: "https://sb-openapi.zalopay.vn/v2/query",
-    callback_url: "https://d7b0-113-161-85-254.ngrok-free.app/order/zalopay-callback" 
+    callback_url: "https://1319-2405-4802-80bc-4590-f4cc-97f8-4531-42a3.ngrok-free.app/order/zalopay-callback" 
 };
 
 const createZaloPayOrder = async (amount, pendingOrderId, appTransId) => {

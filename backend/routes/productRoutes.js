@@ -33,6 +33,61 @@ router.get("/order/products", (req, res) => {
     );
 });
 
+// Route để lấy danh sách Best Seller
+router.get("/bestsellers", (req, res) => {
+    console.log("Request headers:", req.headers); // In headers để kiểm tra
+    console.log("Request user (if any):", req.user); // Kiểm tra xem middleware có thêm req.user không
+
+    const query = `
+        SELECT 
+            oi.product_id,
+            p.name,
+            p.price,
+            p.discount,
+            p.final_price,
+            p.quantity AS stock_quantity,
+            p.images,
+            p.nutrients,
+            p.brand,
+            p.category,
+            p.ingredients,
+            p.main_category,
+            SUM(oi.quantity) AS total_sold
+        FROM order_items oi
+        JOIN products p ON oi.product_id = p.product_id
+        GROUP BY oi.product_id, p.name, p.price, p.discount, p.final_price, p.quantity, p.images, p.nutrients, p.brand, p.category, p.ingredients, p.main_category
+        ORDER BY total_sold DESC
+        LIMIT 10
+    `;
+
+    console.log("Executing query:", query); // In truy vấn thực tế
+
+    connection.query(query, (err, results) => {
+        if (err) {
+            console.log("❌ Lỗi khi lấy danh sách Best Seller:", err.message || err);
+            return res.status(500).json({ message: "Lỗi server", error: err.message || err });
+        }
+
+        const bestSellers = results.map(product => ({
+            product_id: product.product_id,
+            name: product.name,
+            price: product.price,
+            discount: product.discount,
+            final_price: product.final_price,
+            quantity: product.stock_quantity,
+            images: product.images,
+            nutrients: product.nutrients,
+            brand: product.brand,
+            category: product.category,
+            ingredients: product.ingredients,
+            main_category: product.main_category,
+            total_sold: product.total_sold
+        }));
+
+        res.json({ bestSellers });
+    });
+});
+
 // Route để lấy chi tiết sản phẩm theo ID
 router.get("/:id", verifyToken, (req, res) => {
     const productId = parseInt(req.params.id);
@@ -117,5 +172,7 @@ router.delete("/:id", (req, res) => {
         }
     );
 });
+
+
 
 module.exports = router;

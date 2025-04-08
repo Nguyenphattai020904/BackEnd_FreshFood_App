@@ -55,7 +55,7 @@ const removeAccents = (str) => {
 const triggerKeywords = [
     "danh sách", "hãy lấy", "lấy cho tui", "lấy", "muốn", "nguyên liệu", "công thức",
     "cho tui", "tìm", "có những", "liệt kê", "gợi ý", "đề xuất", "cần", "tìm kiếm",
-    "món ăn", "thực phẩm", "sản phẩm", "dinh dưỡng", "ăn uống", "chế độ ăn", "giảm giá"
+    "món ăn", "thực phẩm", "sản phẩm", "dinh dưỡng", "ăn uống", "chế độ ăn", "giảm giá", "công thức"
 ];
 
 // 🔹 Lấy danh sách sản phẩm từ database để thêm vào validTopics
@@ -71,7 +71,7 @@ let validTopics = [
     "mì", "gia vị", "dầu ăn", "nước chấm", "thức uống", "trà", "cà phê", 
     "năng lượng", "cholesterol", "đạm", "khoáng chất", "chất xơ", 
     "healthy", "lành mạnh", "tập luyện", "thể dục", "béo phì", "tiểu đường", "kế hoạchhoạch", "nghèo", "ít tiền", "giá rẻ", "thực phẩm giá rẻ", "thực phẩm tiết kiệm", "thực phẩm bình dân",
-    "thực phẩm hữu cơ", "thực phẩm sạch", "thực phẩm an toàn", "thực phẩm tươi sống", "thực phẩm chế biến sẵn", "thực phẩm dinh dưỡng", "thực phẩm bổ sung", "thực phẩm chức năng", "thực phẩm tiện lợi", "thực phẩm nhanh chóng", "thực phẩm dễ chế biến", "thực phẩm dễ ăn", "thực phẩm ngon miệng", "thực phẩm hấp dẫn", "thực phẩm bổ dưỡng", "cảm cúm", "sốt", "đãi tiệc", "sinh nhật", "mừng tuổi", "mừng thọ",
+    "thực phẩm hữu cơ", "thực phẩm sạch", "thực phẩm an toàn", "thực phẩm tươi sống", "thực phẩm chế biến sẵn", "thực phẩm dinh dưỡng", "thực phẩm bổ sung", "thực phẩm chức năng", "thực phẩm tiện lợi", "thực phẩm nhanh chóng", "thực phẩm dễ chế biến", "thực phẩm dễ ăn", "thực phẩm ngon miệng", "thực phẩm hấp dẫn", "thực phẩm bổ dưỡng", "cảm cúm", "sốt", "đãi tiệc", "sinh nhật", "mừng tuổi", "mừng thọ", "bún bò", "phở", "cơm tấm", "bánh mì", "hủ tiếu", "bánh xèo", "gỏi cuốn", "chả giò", "bánh tráng", "bánh bao", "bánh bột lọc", "bánh bèo", "bánh đúc", "bánh chưng", "bánh tét", "bánh trung thu", "bánh kem", "bánh sinh nhật",
 
     // Tiếng Anh
     "food", "nutrition", "health", "diet", "calories", "protein", 

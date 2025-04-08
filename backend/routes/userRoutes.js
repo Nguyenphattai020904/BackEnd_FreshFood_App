@@ -3,7 +3,9 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const connection = require("../db");
 const nodemailer = require("nodemailer");
-const verifyToken = require("../middleware/auth"); // Middleware để xác thực token
+const verifyToken = require("../middleware/auth");
+const multer = require("multer");
+const path = require("path");
 require("dotenv").config();
 
 const router = express.Router();
@@ -17,7 +19,41 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-// Hàm tạo OTP ngẫu nhiên (6 số)
+// Cấu hình multer để lưu ảnh vào thư mục uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, "uploads/");
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    },
+});
+
+const upload = multer({
+    storage: storage,
+    fileFilter: (req, file, cb) => {
+        console.log("📁 File received - Original name:", file.originalname, "MIME type:", file.mimetype);
+        const filetypes = /jpeg|jpg|png/;
+        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = filetypes.test(file.mimetype);
+        if (extname && mimetype) {
+            return cb(null, true);
+        } else {
+            cb(new Error("Only images (jpeg, jpg, png) are allowed!"));
+        }
+    },
+    limits: { fileSize: 5 * 1024 * 1024 },
+}).single("profile_img");
+
+const fs = require("fs");
+const uploadDir = "uploads";
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
+const BASE_URL = "http://192.168.1.3:3000";
+
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 // Đăng ký
@@ -27,7 +63,6 @@ router.post("/register", async (req, res) => {
         return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Kiểm tra email đã tồn tại chưa
     connection.query("SELECT * FROM users WHERE email = ?", [email], async (err, results) => {
         if (err) return res.status(500).json({ message: "Database error" });
         if (results.length > 0) return res.status(400).json({ message: "Email already exists" });
@@ -35,13 +70,122 @@ router.post("/register", async (req, res) => {
         try {
             const hashedPassword = await bcrypt.hash(password, 10);
             connection.query(
-                "INSERT INTO users (name, email, phone, password, gender, dateOfBirth, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                "INSERT INTO users (name, email, phone, password, gender, dateOfBirth, created_at, updated_at, profile_img) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(), NULL)",
                 [name, email, phone, hashedPassword, gender || null, dateOfBirth || null],
                 (err, result) => {
                     if (err) {
                         return res.status(500).json({ message: "Database error", error: err.sqlMessage });
                     }
-                    res.status(201).json({ message: "User registered successfully" });
+
+                    const newUserId = result.insertId;
+
+                    connection.query(
+                        "INSERT INTO spin_attempts (user_id, spin_count, last_updated) VALUES (?, 1, NOW())",
+                        [newUserId],
+                        (err) => {
+                            if (err) {
+                                console.log("❌ Error adding initial spin:", err.message);
+                            }
+
+                            const message = "Bạn đã nhận được 1 lượt quay. Hãy quay ngay!";
+                            connection.query(
+                                "INSERT INTO notifications (user_id, type, message, related_id) VALUES (?, 'spin_received', ?, NULL)",
+                                [newUserId, message],
+                                (err) => {
+                                    if (err) {
+                                        console.log("❌ Error adding notification:", err.message);
+                                    }
+                                }
+                            );
+
+                            res.status(201).json({ message: "User registered successfully" });
+                        }
+                    );
+                }
+            );
+        } catch (error) {
+            res.status(500).json({ message: "Server error", error: error.message });
+        }
+    });
+});
+
+// Đăng ký qua Google
+router.post("/registerWithGoogle", async (req, res) => {
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+        return res.status(400).json({ message: "Name and email are required" });
+    }
+
+    connection.query("SELECT * FROM users WHERE email = ?", [email], async (err, results) => {
+        if (err) return res.status(500).json({ message: "Database error" });
+        if (results.length > 0) {
+            // Nếu email đã tồn tại, trả về thông tin người dùng và tạo token
+            const user = results[0];
+            const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: "1h" });
+            return res.status(200).json({
+                message: "User already exists, logged in successfully",
+                token,
+                userId: user.id.toString(),
+                user: {
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone || "",
+                    gender: user.gender || "",
+                    dateOfBirth: user.dateOfBirth || null,
+                    profile_img: user.profile_img ? `${BASE_URL}/${user.profile_img}` : null,
+                },
+            });
+        }
+
+        try {
+            connection.query(
+                "INSERT INTO users (name, email, phone, password, gender, dateOfBirth, created_at, updated_at, profile_img) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(), NULL)",
+                [name, email, null, null, null, null],
+                (err, result) => {
+                    if (err) {
+                        return res.status(500).json({ message: "Database error", error: err.sqlMessage });
+                    }
+
+                    const newUserId = result.insertId;
+
+                    // Tạo token cho người dùng mới
+                    const token = jwt.sign({ id: newUserId, email: email }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+                    connection.query(
+                        "INSERT INTO spin_attempts (user_id, spin_count, last_updated) VALUES (?, 1, NOW())",
+                        [newUserId],
+                        (err) => {
+                            if (err) {
+                                console.log("❌ Error adding initial spin:", err.message);
+                            }
+
+                            const message = "Bạn đã nhận được 1 lượt quay. Hãy quay ngay!";
+                            connection.query(
+                                "INSERT INTO notifications (user_id, type, message, related_id) VALUES (?, 'spin_received', ?, NULL)",
+                                [newUserId, message],
+                                (err) => {
+                                    if (err) {
+                                        console.log("❌ Error adding notification:", err.message);
+                                    }
+                                }
+                            );
+
+                            res.status(201).json({
+                                message: "User registered successfully",
+                                token,
+                                userId: newUserId.toString(),
+                                user: {
+                                    name: name,
+                                    email: email,
+                                    phone: "",
+                                    gender: "",
+                                    dateOfBirth: null,
+                                    profile_img: null,
+                                },
+                            });
+                        }
+                    );
                 }
             );
         } catch (error) {
@@ -53,38 +197,41 @@ router.post("/register", async (req, res) => {
 // Đăng nhập
 router.post("/login", (req, res) => {
     const { email, password } = req.body;
-    connection.query("SELECT * FROM users WHERE email = ?", [email], async (err, results) => {
-        if (err) return res.status(500).json({ message: "Database error" });
-        if (results.length === 0) return res.status(401).json({ message: "User not found" });
+    connection.query(
+        "SELECT id, name, email, phone, password, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth, profile_img FROM users WHERE email = ?",
+        [email],
+        async (err, results) => {
+            if (err) return res.status(500).json({ message: "Database error" });
+            if (results.length === 0) return res.status(401).json({ message: "User not found" });
 
-        const user = results[0];
-        const passwordMatch = await bcrypt.compare(password, user.password);
-        if (!passwordMatch) return res.status(401).json({ message: "Invalid credentials" });
+            const user = results[0];
+            const passwordMatch = await bcrypt.compare(password, user.password);
+            if (!passwordMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-        // Tạo JWT token
-        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: "1h" });
+            const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: "1h" });
 
-        // Trả về thông tin người dùng, bao gồm userId
-        res.json({
-            message: "Login successful",
-            token,
-            userId: user.id.toString(), // Thêm userId vào response
-            user: {
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                gender: user.gender,
-                dateOfBirth: user.dateOfBirth ? user.dateOfBirth.toISOString().split("T")[0] : null
-            }
-        });
-    });
+            res.json({
+                message: "Login successful",
+                token,
+                userId: user.id.toString(),
+                user: {
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    gender: user.gender || "",
+                    dateOfBirth: user.dateOfBirth || null,
+                    profile_img: user.profile_img ? `${BASE_URL}/${user.profile_img}` : null,
+                },
+            });
+        }
+    );
 });
 
 // Lấy thông tin người dùng
 router.get("/user", verifyToken, (req, res) => {
     const userId = req.user.id;
     connection.query(
-        "SELECT name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth FROM users WHERE id = ?",
+        "SELECT name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth, profile_img FROM users WHERE id = ?",
         [userId],
         (err, results) => {
             if (err) return res.status(500).json({ message: "Database error", error: err });
@@ -97,33 +244,105 @@ router.get("/user", verifyToken, (req, res) => {
                     name: user.name,
                     email: user.email,
                     phone: user.phone,
-                    gender: user.gender,
-                    dateOfBirth: user.dateOfBirth // Đã được định dạng thành chuỗi YYYY-MM-DD
-                }
+                    gender: user.gender || "",
+                    dateOfBirth: user.dateOfBirth || null,
+                    profile_img: user.profile_img ? `${BASE_URL}/${user.profile_img}` : null,
+                },
             });
         }
     );
 });
 
-// Cập nhật thông tin người dùng
-router.put("/updateProfile", verifyToken, async (req, res) => {
-    const userId = req.user.id;
-    const { name, phone, gender, dateOfBirth } = req.body;
-
-    if (!name || !phone) {
-        return res.status(400).json({ message: "Name and phone are required" });
-    }
-
-    connection.query(
-        "UPDATE users SET name = ?, phone = ?, gender = ?, dateOfBirth = ?, updated_at = NOW() WHERE id = ?",
-        [name, phone, gender, dateOfBirth, userId],
-        (err, result) => {
-            if (err) return res.status(500).json({ message: "Database error", error: err });
-            if (result.affectedRows === 0) return res.status(404).json({ message: "User not found" });
-
-            res.json({ message: "Profile updated successfully" });
+// Cập nhật thông tin người dùng (bao gồm ảnh đại diện)
+router.put("/updateProfile", verifyToken, (req, res) => {
+    upload(req, res, (err) => {
+        if (err) {
+            console.log("❌ Multer error:", err.message);
+            return res.status(400).json({ message: err.message });
         }
-    );
+
+        const userId = req.user.id;
+        let { name, phone, gender, dateOfBirth } = req.body;
+        const profileImg = req.file ? `uploads/${req.file.filename}` : null;
+
+        if (req.file) {
+            console.log("📁 File saved at:", req.file.path);
+            console.log("📁 File size:", req.file.size, "bytes");
+        } else {
+            console.log("⚠️ No file uploaded");
+        }
+
+        // Xử lý dữ liệu
+        name = name ? name.replace(/^"|"$/g, "") : name;
+        phone = phone ? phone.replace(/^"|"$/g, "") : phone;
+        gender = gender ? gender.replace(/^"|"$/g, "") : gender;
+
+        // Xử lý dateOfBirth
+        let parsedDateOfBirth = null;
+        if (dateOfBirth && dateOfBirth !== "" && dateOfBirth !== "Not set" && dateOfBirth !== "0000-00-00") {
+            const date = new Date(dateOfBirth);
+            if (!isNaN(date.getTime())) {
+                // Điều chỉnh múi giờ trước khi định dạng
+                const adjustedDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                // Định dạng lại thành yyyy-MM-dd
+                parsedDateOfBirth = adjustedDate.toISOString().split("T")[0];
+            } else {
+                return res.status(400).json({ message: "Invalid dateOfBirth format. Use yyyy-MM-dd" });
+            }
+        }
+
+        console.log("📅 dateOfBirth before saving:", parsedDateOfBirth);
+
+        if (!name || !phone) {
+            return res.status(400).json({ message: "Name and phone are required" });
+        }
+
+        connection.query("SELECT profile_img FROM users WHERE id = ?", [userId], (err, results) => {
+            if (err) return res.status(500).json({ message: "Database error", error: err });
+            if (results.length === 0) return res.status(404).json({ message: "User not found" });
+
+            const oldProfileImg = results[0].profile_img;
+
+            if (profileImg && oldProfileImg) {
+                fs.unlink(oldProfileImg, (err) => {
+                    if (err) console.log("❌ Error deleting old profile image:", err.message);
+                });
+            }
+
+            connection.query(
+                "UPDATE users SET name = ?, phone = ?, gender = ?, dateOfBirth = ?, profile_img = ?, updated_at = NOW() WHERE id = ?",
+                [name, phone, gender || null, parsedDateOfBirth, profileImg || oldProfileImg, userId],
+                (err, result) => {
+                    if (err) {
+                        console.log("❌ Database error:", err.message);
+                        return res.status(500).json({ message: "Database error", error: err });
+                    }
+                    if (result.affectedRows === 0) return res.status(404).json({ message: "User not found" });
+
+                    connection.query(
+                        "SELECT name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth, profile_img FROM users WHERE id = ?",
+                        [userId],
+                        (err, updatedResults) => {
+                            if (err) return res.status(500).json({ message: "Database error", error: err });
+
+                            const updatedUser = updatedResults[0];
+                            res.json({
+                                message: "Profile updated successfully",
+                                user: {
+                                    name: updatedUser.name,
+                                    email: updatedUser.email,
+                                    phone: updatedUser.phone,
+                                    gender: updatedUser.gender || "",
+                                    dateOfBirth: updatedUser.dateOfBirth || "Not set",
+                                    profile_img: updatedUser.profile_img ? `${BASE_URL}/${updatedUser.profile_img}` : null,
+                                },
+                            });
+                        }
+                    );
+                }
+            );
+        });
+    });
 });
 
 // Gửi OTP qua email
@@ -243,10 +462,17 @@ router.post("/updatePassword", async (req, res) => {
 // Lấy danh sách tất cả người dùng
 router.get("/all", (req, res) => {
     connection.query(
-        "SELECT id, name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth FROM users",
+        "SELECT id, name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth, profile_img FROM users",
         (err, results) => {
             if (err) return res.status(500).json({ message: "Database error", error: err });
-            res.json({ users: results });
+            res.json({
+                users: results.map(user => ({
+                    ...user,
+                    gender: user.gender || "",
+                    dateOfBirth: user.dateOfBirth || null,
+                    profile_img: user.profile_img ? `${BASE_URL}/${user.profile_img}` : null,
+                })),
+            });
         }
     );
 });
@@ -255,12 +481,18 @@ router.get("/all", (req, res) => {
 router.get("/user/:id", (req, res) => {
     const userId = req.params.id;
     connection.query(
-        "SELECT id, name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth FROM users WHERE id = ?",
+        "SELECT id, name, email, phone, gender, DATE_FORMAT(dateOfBirth, '%Y-%m-%d') AS dateOfBirth, profile_img FROM users WHERE id = ?",
         [userId],
         (err, results) => {
             if (err) return res.status(500).json({ message: "Database error", error: err });
             if (results.length === 0) return res.status(404).json({ message: "User not found" });
-            res.json(results[0]);
+            const user = results[0];
+            res.json({
+                ...user,
+                gender: user.gender || "",
+                dateOfBirth: user.dateOfBirth || null,
+                profile_img: user.profile_img ? `${BASE_URL}/${user.profile_img}` : null,
+            });
         }
     );
 });
@@ -268,15 +500,24 @@ router.get("/user/:id", (req, res) => {
 // Xóa người dùng
 router.delete("/:id", (req, res) => {
     const userId = req.params.id;
-    connection.query(
-        "DELETE FROM users WHERE id = ?",
-        [userId],
-        (err, results) => {
+    connection.query("SELECT profile_img FROM users WHERE id = ?", [userId], (err, results) => {
+        if (err) return res.status(500).json({ message: "Database error", error: err });
+        if (results.length === 0) return res.status(404).json({ message: "User not found" });
+
+        const profileImg = results[0].profile_img;
+
+        if (profileImg) {
+            fs.unlink(profileImg, (err) => {
+                if (err) console.log("❌ Error deleting profile image:", err.message);
+            });
+        }
+
+        connection.query("DELETE FROM users WHERE id = ?", [userId], (err, results) => {
             if (err) return res.status(500).json({ message: "Database error", error: err });
             if (results.affectedRows === 0) return res.status(404).json({ message: "User not found" });
             res.json({ message: "User deleted successfully" });
-        }
-    );
+        });
+    });
 });
 
 module.exports = router;

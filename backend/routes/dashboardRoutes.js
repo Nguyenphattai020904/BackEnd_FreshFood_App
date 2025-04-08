@@ -3,40 +3,49 @@ const db = require('../db');
 const router = express.Router();
 
 router.get('/sales-stats', (req, res) => {
-    console.log("📩 Request to /dashboard/sales-stats received at:", new Date().toISOString());
-    console.log("Request headers:", req.headers);
-
-    const date = req.query.date || '2025-04-03'; // Mặc định là 3/4/2025
-    console.log("📅 Date parameter:", date);
+    const requestId = req.query.requestId || 'unknown';
+    console.log(`📩 Yêu cầu đến /dashboard/sales-stats nhận được lúc: ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}, Request ID: ${requestId}`);
 
     const query = `
+        WITH RECURSIVE date_range AS (
+            SELECT DATE(MIN(created_at)) AS sale_date
+            FROM orders
+            UNION ALL
+            SELECT DATE_ADD(sale_date, INTERVAL 1 DAY)
+            FROM date_range
+            WHERE sale_date < DATE(NOW())
+        )
         SELECT 
-            DATE(o.created_at) as sale_date,
-            SUM(o.total_price) as total_revenue,
-            SUM(oi.quantity) as total_quantity
-        FROM orders o
-        LEFT JOIN order_items oi ON o.id = oi.order_id
-        WHERE DATE(o.created_at) = ?
-        GROUP BY DATE(o.created_at)
-        ORDER BY sale_date ASC
+            dr.sale_date,
+            COALESCE(SUM(o.total_price), 0) AS total_revenue,
+            COALESCE((
+                SELECT SUM(oi.quantity)
+                FROM order_items oi
+                JOIN orders o2 ON oi.order_id = o2.id
+                WHERE DATE(o2.created_at) = dr.sale_date
+            ), 0) AS total_quantity
+        FROM date_range dr
+        LEFT JOIN orders o ON DATE(o.created_at) = dr.sale_date
+        GROUP BY dr.sale_date
+        ORDER BY dr.sale_date ASC
     `;
 
-    db.query(query, [date], (err, results) => {
+    db.query(query, (err, results) => {
         if (err) {
-            console.error("❌ Database error:", err);
-            return res.status(500).json({ message: "Database error", error: err.message });
+            console.error(`❌ Lỗi cơ sở dữ liệu cho Request ID ${requestId}:`, err);
+            return res.status(500).json({ message: "Lỗi cơ sở dữ liệu", error: err.message });
         }
 
-        // Nếu không có dữ liệu, trả về mảng rỗng
-        const stats = results.length > 0 
-            ? results.map(row => ({
-                date: row.sale_date.toISOString().split('T')[0],
-                totalRevenue: row.total_revenue || 0,
-                totalQuantity: row.total_quantity || 0
-            }))
-            : [];
+        console.log(`📊 Kết quả truy vấn thô cho Request ID ${requestId}:`, results);
 
-        console.log("📊 Sales stats response:", stats);
+        const stats = results.map(row => ({
+            date: row.sale_date.toISOString().split('T')[0],
+            totalRevenue: Number(row.total_revenue) || 0,
+            totalQuantity: Number(row.total_quantity) || 0
+        }));
+
+        console.log(`📊 Phản hồi thống kê doanh thu cho Request ID ${requestId}:`, stats);
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
         res.json({ salesStats: stats });
     });
 });
