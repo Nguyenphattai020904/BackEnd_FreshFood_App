@@ -52,7 +52,7 @@ if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
 }
 
-const BASE_URL = "http://192.168.1.3:3000";
+const BASE_URL = "http://172.16.65.119:3000";
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
