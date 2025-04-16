@@ -13,7 +13,7 @@ const config = {
     key2: "trMrHtvjo6myautxDUiAcYsVtaeQ8nhf",
     endpoint_create: "https://sb-openapi.zalopay.vn/v2/create",
     endpoint_query: "https://sb-openapi.zalopay.vn/v2/query",
-    callback_url: "https://fd12-222-253-144-157.ngrok-free.app/order/zalopay-callback" // Thay bằng ngrok URL mới
+    callback_url: "https://ec95-2405-4802-80bc-4590-a3-7f3f-7b2c-ef30.ngrok-free.app/order/zalopay-callback" 
 };
 
 // Hàm tạo app_trans_id duy nhất
@@ -940,4 +940,5 @@ router.delete("/:orderId", (req, res) => {
         }
     );
 });
+
 module.exports = router;

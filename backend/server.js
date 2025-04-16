@@ -12,9 +12,9 @@ const voucherRoutes = require('./routes/voucherRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const voucherWebRoutes = require('./routes/voucherWebRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
-const orderRoutess = require('./routes/orderRoutes'); 
+const orderRoutess = require('./routes/admin-orders'); 
 const spinRoutes = require('./routes/spinRoutes');
-
+const adminOrdersRouter = require("./routes/admin-orders");
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -30,7 +30,7 @@ app.use('/api/vouchers', voucherRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/api/vouchers/web', voucherWebRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/order', orderRoutess); 
+app.use("/admin-orders", adminOrdersRouter); 
 app.use('/api/spin', spinRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 

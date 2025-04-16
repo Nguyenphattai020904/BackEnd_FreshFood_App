@@ -136,7 +136,7 @@ router.post('/spin/:userId', verifyToken, async (req, res) => {
         const voucherName = `Voucher từ LuckyWheel ${result}%`;
         const voucherType = 'percentage';
         const voucherValue = result;
-        const voucherDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // Hết hạn sau 7 ngày
+        const voucherDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // Hết hạn sau 7 ngày
         const minOrderValue = 0;
         const voucherImage = discountImages[result] || null; // Lấy URL hình ảnh
 
